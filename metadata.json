@@ -1,0 +1,6 @@
+{
+  "name": "線上討論區",
+  "description": "提供師生進行房間創建、討論主題建立、留言與回覆交流的線上討論環境。教師可管控討論主題、刪除不當留言，並支援列印與匯出討論紀錄。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
