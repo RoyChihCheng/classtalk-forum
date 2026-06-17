@@ -3,7 +3,7 @@ import HomeView from "./components/HomeView";
 import RoomDashboard from "./components/RoomDashboard";
 import TopicDiscussion from "./components/TopicDiscussion";
 import { Room, HistoryItem } from "./types";
-import { MessageSquare, ArrowLeft, RefreshCw } from "lucide-react";
+import { MessageSquare, ArrowLeft, RefreshCw, GraduationCap, ArrowRight } from "lucide-react";
 
 export default function App() {
   const [currentView, setCurrentView] = useState<"home" | "dashboard" | "discussion">("home");
@@ -15,6 +15,19 @@ export default function App() {
   const [historyList, setHistoryList] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 酷英 SSO：優先從網址參數讀取，其次從 sessionStorage 還原
+  const [ssoName, setSsoName] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("sso_name") || sessionStorage.getItem("sso_name") || "";
+  });
+  const [ssoRole, setSsoRole] = useState<"teacher" | "student" | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("sso_role");
+    if (fromUrl === "teacher" || fromUrl === "student") return fromUrl;
+    const fromStorage = sessionStorage.getItem("sso_role");
+    return fromStorage === "teacher" || fromStorage === "student" ? fromStorage : null;
+  });
+
   // Load history from localStorage on mount
   useEffect(() => {
     try {
@@ -24,6 +37,24 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to parse local history:", err);
+    }
+  }, []);
+
+  // 酷英 SSO：讀取網址參數並存入 sessionStorage
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const name = params.get("sso_name");
+    const role = params.get("sso_role");
+    if (name) {
+      sessionStorage.setItem("sso_name", name);
+      setSsoName(name);
+    }
+    if (role === "teacher" || role === "student") {
+      sessionStorage.setItem("sso_role", role);
+      setSsoRole(role);
+    }
+    if (name || role) {
+      window.history.replaceState({}, "", "/");
     }
   }, []);
 
@@ -103,6 +134,27 @@ export default function App() {
     setCurrentView("discussion");
   };
 
+  // SSO 登入閘口：未經酷英驗證則擋住所有畫面
+  if (!ssoName || !ssoRole) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center p-10 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-sm w-full">
+          <GraduationCap className="w-14 h-14 text-indigo-600 mx-auto mb-5" />
+          <h1 className="text-2xl font-bold text-slate-800 mb-3">線上討論區</h1>
+          <p className="text-slate-500 text-sm mb-6">請先登入酷英平台，才能使用此服務。</p>
+          <a
+            href="https://www.coolenglish.edu.tw/ai/classtalk.php"
+            className="inline-flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors shadow-sm"
+          >
+            前往酷英登入
+            <ArrowRight className="w-4 h-4" />
+          </a>
+          <p className="text-xs text-slate-400 mt-4">登入後將自動返回討論區</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 antialiased font-sans flex flex-col justify-between">
       
@@ -126,6 +178,8 @@ export default function App() {
             historyList={historyList}
             onClearHistory={handleClearHistory}
             onRemoveHistoryItem={handleRemoveHistoryItem}
+            ssoName={ssoName}
+            ssoRole={ssoRole}
           />
         )}
 

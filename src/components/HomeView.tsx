@@ -7,9 +7,11 @@ interface HomeViewProps {
   historyList: HistoryItem[];
   onClearHistory: () => void;
   onRemoveHistoryItem?: (code: string, role: "teacher" | "student") => void;
+  ssoName?: string;
+  ssoRole?: "teacher" | "student" | null;
 }
 
-export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRemoveHistoryItem }: HomeViewProps) {
+export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRemoveHistoryItem, ssoName, ssoRole }: HomeViewProps) {
   // Common states
   const [activeTab, setActiveTab] = useState<"student" | "teacher">("student");
 
@@ -28,6 +30,15 @@ export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRe
 
   // Live Time state
   const [liveTime, setLiveTime] = useState("");
+
+  // 酷英 SSO：自動填入姓名和切換身分
+  useEffect(() => {
+    if (ssoRole) setActiveTab(ssoRole);
+    if (ssoName) {
+      if (ssoRole === "teacher") setTeacherName(ssoName);
+      else setStudentName(ssoName);
+    }
+  }, [ssoName, ssoRole]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -153,39 +164,34 @@ export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRe
         </div>
       </header>
 
-      {/* Role Tabs */}
-      <div className="flex bg-slate-100 p-1.5 rounded-xl max-w-md mx-auto mb-8 border border-slate-200" id="role_tabs">
-        <button
-          onClick={() => {
-            setActiveTab("student");
-            setErrorMessage("");
-          }}
-          className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-            activeTab === "student"
-              ? "bg-white text-indigo-600 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-          id="btn_student_tab"
-        >
-          <Users className="w-4 h-4" />
-          我是學生 (加入討論)
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab("teacher");
-            setErrorMessage("");
-          }}
-          className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${
-            activeTab === "teacher"
-              ? "bg-white text-indigo-600 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-          id="btn_teacher_tab"
-        >
-          <GraduationCap className="w-4 h-4" />
-          我是教師 (創建/管理)
-        </button>
-      </div>
+      {/* Role Tabs：SSO 登入後鎖定身分，不顯示切換按鈕 */}
+      {!ssoRole ? (
+        <div className="flex bg-slate-100 p-1.5 rounded-xl max-w-md mx-auto mb-8 border border-slate-200" id="role_tabs">
+          <button
+            onClick={() => { setActiveTab("student"); setErrorMessage(""); }}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${activeTab === "student" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            id="btn_student_tab"
+          >
+            <Users className="w-4 h-4" />
+            我是學生 (加入討論)
+          </button>
+          <button
+            onClick={() => { setActiveTab("teacher"); setErrorMessage(""); }}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium text-sm transition-all flex items-center justify-center gap-2 ${activeTab === "teacher" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            id="btn_teacher_tab"
+          >
+            <GraduationCap className="w-4 h-4" />
+            我是教師 (創建/管理)
+          </button>
+        </div>
+      ) : (
+        <div className="flex justify-center mb-8">
+          <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 text-indigo-700 px-4 py-2 rounded-full text-sm font-semibold">
+            {ssoRole === "teacher" ? <GraduationCap className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+            {ssoRole === "teacher" ? "教師身分登入" : "學生身分登入"} · {ssoName}
+          </div>
+        </div>
+      )}
 
       {/* Content Columns depending on Active Tab */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
@@ -193,7 +199,14 @@ export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRe
         {/* Left Side: Creation or Joining Forms */}
         <main className="md:col-span-3 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm min-h-[400px] flex flex-col justify-between">
           <div>
-            {activeTab === "teacher" ? (
+            {activeTab === "teacher" && ssoRole === "student" ? (
+              /* 學生不能創建房間 */
+              <div className="flex flex-col items-center justify-center h-64 text-center gap-3">
+                <ShieldAlert className="w-10 h-10 text-slate-300" />
+                <p className="text-slate-500 font-semibold">學生身分無法創建討論室</p>
+                <p className="text-xs text-slate-400">請切換至學生頁籤以加入討論。</p>
+              </div>
+            ) : activeTab === "teacher" ? (
               /* TEACHER SECTION: Create or Management */
               <div>
                 {!createdRoom ? (
@@ -249,9 +262,10 @@ export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRe
                           <input
                             type="text"
                             value={teacherName}
-                            onChange={(e) => setTeacherName(e.target.value)}
+                            onChange={(e) => !ssoName && setTeacherName(e.target.value)}
+                            readOnly={!!ssoName}
                             placeholder="教師"
-                            className="bg-transparent text-right outline-none text-slate-800 font-semibold focus:border-b focus:border-indigo-500 px-1 py-0.5"
+                            className={`bg-transparent text-right outline-none text-slate-800 font-semibold px-1 py-0.5 ${ssoName ? "cursor-default select-none" : "focus:border-b focus:border-indigo-500"}`}
                           />
                         </div>
                       </div>
@@ -359,10 +373,11 @@ export default function HomeView({ onJoinRoom, historyList, onClearHistory, onRe
                     <input
                       type="text"
                       value={studentName}
-                      onChange={(e) => setStudentName(e.target.value)}
+                      onChange={(e) => !ssoName && setStudentName(e.target.value)}
+                      readOnly={!!ssoName}
                       placeholder="請輸入你的姓名 / 顯示暱稱"
                       maxLength={15}
-                      className="w-full text-sm px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-800"
+                      className={`w-full text-sm px-4 py-3 rounded-xl border text-slate-800 outline-none ${ssoName ? "bg-slate-50 border-slate-200 cursor-default" : "border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"}`}
                       required
                       id="input_student_name"
                     />

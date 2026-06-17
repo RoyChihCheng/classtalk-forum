@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { createClient } from "@supabase/supabase-js";
 
@@ -112,6 +113,54 @@ async function startServer() {
   const PORT = parseInt(process.env.PORT || "8080");
 
   app.use(express.json());
+
+  // GET /auth/callback — 酷英 SSO 跳轉入口
+  app.get("/auth/callback", (req, res) => {
+    const { p, q } = req.query;
+
+    // 1. 檢查參數存在
+    if (!p || !q || typeof p !== "string" || typeof q !== "string") {
+      return res.status(400).send("缺少必要參數，請重新從酷英登入");
+    }
+
+    // 2. 驗證簽章
+    const secret = process.env.COOLENG_SSO_SECRET!;
+    const expectedQ = crypto.createHash("sha256").update(p + secret).digest("hex");
+    if (expectedQ !== q) {
+      return res.status(403).send("驗證失敗，請重新從酷英登入");
+    }
+
+    // 3. 解碼 p（hex → 文字）
+    let decoded: string;
+    try {
+      decoded = Buffer.from(p, "hex").toString("utf8");
+    } catch {
+      return res.status(400).send("資料格式錯誤");
+    }
+
+    // 4. 切開欄位：userid|姓名|role|timestamp|cool
+    const parts = decoded.split("|");
+    if (parts.length < 5) {
+      return res.status(400).send("資料格式錯誤");
+    }
+    const [, name, role, timestamp] = parts;
+
+    // 5. 驗證時間戳（5 分鐘內有效）
+    const ts = parseInt(timestamp);
+    const now = Math.floor(Date.now() / 1000);
+    if (Math.abs(now - ts) > 300) {
+      return res.status(403).send("連結已過期，請重新從酷英登入");
+    }
+
+    // 6. 驗證 role 格式
+    if (role !== "teacher" && role !== "student") {
+      return res.status(400).send("無效的身分");
+    }
+
+    // 7. 跳轉到前端，帶上姓名和身分
+    const redirectUrl = `/?sso_name=${encodeURIComponent(name)}&sso_role=${encodeURIComponent(role)}`;
+    res.redirect(redirectUrl);
+  });
 
   // GET /api/rooms/:code
   app.get("/api/rooms/:code", async (req, res) => {
