@@ -16,6 +16,10 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
 
   // 酷英 SSO：優先從網址參數讀取，其次從 sessionStorage 還原
+  const [ssoUid, setSsoUid] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("sso_uid") || sessionStorage.getItem("sso_uid") || "";
+  });
   const [ssoName, setSsoName] = useState<string>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("sso_name") || sessionStorage.getItem("sso_name") || "";
@@ -28,23 +32,35 @@ export default function App() {
     return fromStorage === "teacher" || fromStorage === "student" ? fromStorage : null;
   });
 
-  // Load history from localStorage on mount
+  // Load history from localStorage — scoped per SSO userid (stable across logins)
   useEffect(() => {
+    if (!ssoUid) return;
     try {
-      const stored = localStorage.getItem("discussion_forum_history");
-      if (stored) {
-        setHistoryList(JSON.parse(stored));
-      }
+      const stored = localStorage.getItem(`discussion_forum_history_${ssoUid}`);
+      if (stored) setHistoryList(JSON.parse(stored));
+      else setHistoryList([]);
     } catch (err) {
       console.error("Failed to parse local history:", err);
+    }
+  }, [ssoUid]);
+
+  // Auto-redirect to CoolEnglish if no SSO session
+  useEffect(() => {
+    if (!ssoName || !ssoRole) {
+      window.location.href = "https://www.coolenglish.edu.tw/ai/classtalk.php";
     }
   }, []);
 
   // 酷英 SSO：讀取網址參數並存入 sessionStorage
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const uid = params.get("sso_uid");
     const name = params.get("sso_name");
     const role = params.get("sso_role");
+    if (uid) {
+      sessionStorage.setItem("sso_uid", uid);
+      setSsoUid(uid);
+    }
     if (name) {
       sessionStorage.setItem("sso_name", name);
       setSsoName(name);
@@ -53,7 +69,7 @@ export default function App() {
       sessionStorage.setItem("sso_role", role);
       setSsoRole(role);
     }
-    if (name || role) {
+    if (uid || name || role) {
       window.history.replaceState({}, "", "/");
     }
   }, []);
@@ -101,7 +117,7 @@ export default function App() {
         // Filter out existing duplicates with same code and role
         const filtered = prev.filter((h) => !(h.code === code && h.role === role));
         const updated = [item, ...filtered]; // Keep all user history records, system does not delete automatically
-        localStorage.setItem("discussion_forum_history", JSON.stringify(updated));
+        localStorage.setItem(`discussion_forum_history_${ssoUid}`, JSON.stringify(updated));
         return updated;
       });
     } catch (err: any) {
@@ -115,7 +131,7 @@ export default function App() {
   const handleRemoveHistoryItem = (code: string, role: "teacher" | "student") => {
     setHistoryList((prev) => {
       const updated = prev.filter((h) => !(h.code === code && h.role === role));
-      localStorage.setItem("discussion_forum_history", JSON.stringify(updated));
+      localStorage.setItem(`discussion_forum_history_${ssoUid}`, JSON.stringify(updated));
       return updated;
     });
   };
@@ -123,7 +139,7 @@ export default function App() {
   // Clear local history
   const handleClearHistory = () => {
     if (confirm("確定要清除所有造訪紀錄嗎？")) {
-      localStorage.removeItem("discussion_forum_history");
+      localStorage.removeItem(`discussion_forum_history_${ssoUid}`);
       setHistoryList([]);
     }
   };
@@ -134,22 +150,13 @@ export default function App() {
     setCurrentView("discussion");
   };
 
-  // SSO 登入閘口：未經酷英驗證則擋住所有畫面
+  // SSO 閘口：自動跳轉中，顯示 spinner
   if (!ssoName || !ssoRole) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="text-center p-10 bg-white rounded-2xl border border-slate-200 shadow-sm max-w-sm w-full">
-          <GraduationCap className="w-14 h-14 text-indigo-600 mx-auto mb-5" />
-          <h1 className="text-2xl font-bold text-slate-800 mb-3">線上討論區</h1>
-          <p className="text-slate-500 text-sm mb-6">請先登入酷英平台，才能使用此服務。</p>
-          <a
-            href="https://www.coolenglish.edu.tw/ai/classtalk.php"
-            className="inline-flex items-center justify-center gap-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors shadow-sm"
-          >
-            前往酷英登入
-            <ArrowRight className="w-4 h-4" />
-          </a>
-          <p className="text-xs text-slate-400 mt-4">登入後將自動返回討論區</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
+          <p className="text-sm text-slate-400">正在跳轉至酷英登入...</p>
         </div>
       </div>
     );

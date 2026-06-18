@@ -143,7 +143,7 @@ async function startServer() {
     if (parts.length < 5) {
       return res.status(400).send("資料格式錯誤");
     }
-    const [, name, role, timestamp] = parts;
+    const [userid, name, role, timestamp] = parts;
 
     // 5. 驗證時間戳（5 分鐘內有效）
     const ts = parseInt(timestamp);
@@ -157,8 +157,8 @@ async function startServer() {
       return res.status(400).send("無效的身分");
     }
 
-    // 7. 跳轉到前端，帶上姓名和身分
-    const redirectUrl = `/?sso_name=${encodeURIComponent(name)}&sso_role=${encodeURIComponent(role)}`;
+    // 7. 跳轉到前端，帶上 userid、姓名和身分（uid 用來做 localStorage key，不受名稱格式影響）
+    const redirectUrl = `/?sso_uid=${encodeURIComponent(userid)}&sso_name=${encodeURIComponent(name)}&sso_role=${encodeURIComponent(role)}`;
     res.redirect(redirectUrl);
   });
 
